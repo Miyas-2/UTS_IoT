@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto p-4 max-w-6xl">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-gray-800">IoT Dashboard</h1>
+                <span id="connectionStatus" class="px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+                    Disconnected
+                </span>
+            </div>
+        </div>
+
+        <!-- Sensor Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <!-- Temperature Card -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Temperature</h3>
+                    <span class="text-2xl">🌡️</span>
+                </div>
+                <div class="text-3xl font-bold text-blue-600 mb-2">
+                    <span id="temperatureValue">--</span><span class="text-lg text-gray-500">°C</span>
+                </div>
+                <p class="text-sm text-gray-500">Updated: <span id="tempTimestamp">--</span></p>
+            </div>
+
+            <!-- Light Card -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Light</h3>
+                    <span class="text-2xl">💡</span>
+                </div>
+                <div class="text-3xl font-bold text-yellow-600 mb-2">
+                    <span id="lightValue">--</span><span class="text-lg text-gray-500"> Lux</span>
+                </div>
+                <p class="text-sm text-gray-500">Updated: <span id="lightTimestamp">--</span></p>
+            </div>
+
+            <!-- LED Status Card -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">LED Status</h3>
+                    <span class="text-2xl">🔌</span>
+                </div>
+                <div class="mb-2">
+                    <span id="relayStatus" class="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">OFF</span>
+                </div>
+                <p class="text-sm text-gray-500">Updated: <span id="relayTimestamp">--</span></p>
+            </div>
+        </div>
+
+        <!-- Control Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">LED Control</h2>
+            <div class="flex gap-4 mb-4">
+                <button id="ledOnBtn" class="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
+                    Turn ON
+                </button>
+                <button id="ledOffBtn" class="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
+                    Turn OFF
+                </button>
+            </div>
+            <div id="controlStatus" class="text-sm"></div>
+        </div>
+
+        <!-- Chart Section -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Live MQTT Chart</h2>
+                <div class="flex gap-2">
+                    <span class="px-3 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Real-time Only</span>
+                    <button id="clearChart" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors text-sm">
+                        Clear
+                    </button>
+                </div>
+            </div>
+            <div class="h-64">
+                <canvas id="sensorChart"></canvas>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">📡 Chart updates live from MQTT data only (last 20 points)</p>
+        </div>
+
+        <!-- Data Table -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Recent Data (Database)</h2>
+                <div class="flex gap-2 items-center">
+                    <span class="text-sm text-gray-600">Show:</span>
+                    <select id="historyLimit" class="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="10">10</option>
+                        <option value="50">50</option>
+                        <option value="100" selected>100</option>
+                    </select>
+                    <span class="text-sm text-gray-600">records</span>
+                    <button id="loadHistory" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors text-sm">
+                        Load History
+                    </button>
+                    <button id="clearTable" class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors text-sm">
+                        Clear
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-gray-600">ID</th>
+                            <th class="px-4 py-2 text-left text-gray-600">Temperature</th>
+                            <th class="px-4 py-2 text-left text-gray-600">Light</th>
+                            <th class="px-4 py-2 text-left text-gray-600">Time</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody" class="divide-y divide-gray-200">
+                        <!-- Data will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex justify-between items-center mt-4">
+                <p class="text-xs text-gray-500">💾 Table shows persisted data from database</p>
+                <p id="dataCount" class="text-xs text-gray-500">Showing 0 records</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
