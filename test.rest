@@ -1,4 +1,4 @@
-# Test history dengan limit 10
+### Test history data dengan limit 10 (should include humidity now)
 GET http://localhost:3000/api/history?limit=10
 
 ###
@@ -6,19 +6,24 @@ GET http://localhost:3000/api/history?limit=10
 GET http://localhost:3000/api/history?limit=50
 
 ###
-# Test history default (100)
-GET http://localhost:3000/api/history
-
-###
-# Test semua data
+# Test semua data (should show temperature, humidity, lux)
 GET http://localhost:3000/api/data
 
 ###
-# Test data by ID (jika ada data)
+# Test data by ID (should include humidity column)
 GET http://localhost:3000/api/data/1
 
 ###
-# Control LED untuk trigger data baru
+# Control LED ON untuk trigger data baru
+POST http://localhost:3000/api/control/led
+Content-Type: application/json
+
+{
+    "command": "ON"
+}
+
+###
+# Control LED OFF
 POST http://localhost:3000/api/control/led
 Content-Type: application/json
 
@@ -29,3 +34,9 @@ Content-Type: application/json
 ###
 # Reset semua data (hati-hati!)
 DELETE http://localhost:3000/api/data/reset
+
+###
+# Test statistik (jika ingin menambahkan endpoint statistik)
+# GET http://localhost:3000/api/statistics
+
+GET http://localhost:3000/summary

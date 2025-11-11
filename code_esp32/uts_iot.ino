@@ -1,12 +1,14 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
+#include <DHT.h> // Menggunakan library DHT
+// Menghapus: #include <OneWire.h>
+// Menghapus: #include <DallasTemperature.h>
 
 // --- 1. PIN Definitions ---
 #define RELAY_PIN 13       // Pin Relay (Lamp/LED)
 #define LDR_PIN 32         // Pin LDR (Analog Input)
-#define ONE_WIRE_BUS 4     // Pin Data DS18B20 (GPIO 4 pada ESP32)
+#define DHT_PIN 15       // Pin Data DHT (Menggantikan ONE_WIRE_BUS)
+#define DHT_TYPE DHT22     // Tipe sensor DHT (Ganti ke DHT11 jika perlu)
 
 // --- 2. WiFi Configuration (GANTI dengan kredensial Anda) ---
 const char* ssid = "test123"; 
@@ -15,20 +17,20 @@ const char* password = "qwerasdf";
 // --- 3. MQTT Configuration ---
 const char* mqtt_server = "broker.mqtt.cool"; 
 const int mqtt_port = 1883;
-const char* mqtt_client_id = "ESP32_Temp_LDR_Relay_Client"; 
+const char* mqtt_client_id = "ESP32_DHT_LDR_Relay_Client"; // Ubah ID
 
 // Topik Publish
-const char* topic_temp = "uts/iot/sensor/temperature_c"; // Suhu Celsius
-const char* topic_ldr = "uts/iot/sensor/ldr";           // Nilai LDR
-const char* topic_relay_status = "uts/iot/status/relay"; // Status Relay
+const char* topic_temp = "uts/152023193/iot/sensor/temperature_c"; // Suhu Celsius
+const char* topic_hum = "uts/152023193/iot/sensor/humidity";      // TOPIC BARU UNTUK KELEMBABAN
+const char* topic_ldr = "uts/152023193/iot/sensor/ldr";           // Nilai LDR
+const char* topic_relay_status = "uts/152023193/iot/status/relay"; // Status Relay
 
 // Topik Subscribe untuk kontrol Relay
-const char* mqtt_topic_subscribe_led = "uts/iot/control_led"; 
+const char* mqtt_topic_subscribe_led = "uts/152023193/iot/control_led"; 
 
 // --- 4. Setup Objects ---
-// DS18B20 Setup
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
+// DHT Setup (Menggantikan DS18B20 Setup)
+DHT dht(DHT_PIN, DHT_TYPE);
 
 // MQTT Setup
 WiFiClient espClient;
@@ -47,7 +49,7 @@ void publish_int_data(const char* topic, int value);
 void publish_string_data(const char* topic, const char* value);
 
 
-// --- 6. Implementation: WiFi dan MQTT Connection ---
+// --- 6. Implementation: WiFi dan MQTT Connection (TIDAK BERUBAH) ---
 
 void setup_wifi() {
     delay(10);
@@ -112,10 +114,10 @@ void callback_mqtt(char* topic, byte* payload, unsigned int length) {
     }
 }
 
-// Fungsi untuk publish nilai float (Suhu)
+// Fungsi publish (Tidak Berubah)
 void publish_float_data(const char* topic, float value) {
     char payload[8]; 
-    dtostrf(value, 4, 2, payload); // Konversi float ke string (2 desimal)
+    dtostrf(value, 4, 2, payload); 
     
     if (!client.publish(topic, payload)) {
         Serial.print("Publish FAILED for ");
@@ -123,7 +125,6 @@ void publish_float_data(const char* topic, float value) {
     }
 }
 
-// Fungsi untuk publish nilai integer (LDR)
 void publish_int_data(const char* topic, int value) {
     char payload[8]; 
     itoa(value, payload, 10); 
@@ -134,7 +135,6 @@ void publish_int_data(const char* topic, int value) {
     }
 }
 
-// Fungsi untuk publish nilai string (Status Relay)
 void publish_string_data(const char* topic, const char* value) {
     if (!client.publish(topic, value)) {
         Serial.print("Publish FAILED for ");
@@ -148,8 +148,8 @@ void publish_string_data(const char* topic, const char* value) {
 void setup() {
     Serial.begin(9600);
     
-    // Inisialisasi Sensor DS18B20
-    sensors.begin();
+    // Inisialisasi Sensor DHT (Menggantikan sensors.begin())
+    dht.begin();
     
     pinMode(RELAY_PIN, OUTPUT);
     digitalWrite(RELAY_PIN, LOW); 
@@ -160,7 +160,7 @@ void setup() {
     client.setServer(mqtt_server, mqtt_port);
     client.setCallback(callback_mqtt); 
     
-    Serial.println("Sistem DS18B20, LDR, dan Relay Siap.");
+    Serial.println("Sistem DHT, LDR, dan Relay Siap.");
 }
 
 void loop() {
@@ -176,25 +176,33 @@ void loop() {
     if (now - lastMeasure >= interval) {
         lastMeasure = now;
 
-        // --- 1. Baca Sensor DS18B20 (Suhu) ---
-        sensors.requestTemperatures(); 
-        // HANYA mengambil nilai Celsius
-        float tempC = sensors.getTempCByIndex(0); 
+        // --- 1. Baca Sensor DHT (Suhu & Kelembaban) ---
+        float tempC = dht.readTemperature(); // Baca Suhu (Celsius)
+        float hum = dht.readHumidity();      // Baca Kelembaban (Persen)
         
         // --- 2. Baca Sensor LDR (Cahaya) ---
         int ldrValue = analogRead(LDR_PIN); 
 
         // --- 3. Publish Data ---
         if (client.connected()) {
-            // Suhu
-            if (tempC != DEVICE_DISCONNECTED_C) {
-                // Publish hanya Celsius ke topik temperature_c
+            
+            // Cek jika pembacaan DHT valid
+            if (!isnan(tempC) && !isnan(hum)) {
+                
+                // Suhu (Celsius)
                 publish_float_data(topic_temp, tempC); 
                 Serial.print("Suhu Published: ");
                 Serial.print(tempC);
-                Serial.println(" ºC"); // Dicetak hanya dalam Celsius
+                Serial.println(" ºC"); 
+                
+                // Kelembaban (BARU!)
+                publish_float_data(topic_hum, hum); 
+                Serial.print("Kelembaban Published: ");
+                Serial.print(hum);
+                Serial.println(" %"); 
+                
             } else {
-                Serial.println("Error: Could not read DS18B20");
+                Serial.println("Error: Gagal membaca dari sensor DHT!");
             }
 
             // LDR
